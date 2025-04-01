@@ -7,13 +7,12 @@ import {
     Typography,
     IconButton,
 } from '@mui/material';
-import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronLeft } from 'lucide-react';
 
 export default function APINavigation({ spec, setSpec, onEndpointSelect, selectedEndpoint, selectedMethod }) {
     const paths = React.useMemo(() => {
         try {
-            const parsedSpec = JSON.parse(spec.spec_content);
-            return Object.entries(parsedSpec.paths || {}).map(([path, methods]) => ({
+            return Object.entries(spec.paths || {}).map(([path, methods]) => ({
                 path,
                 methods: Object.keys(methods).filter(m =>
                     ['get', 'post', 'put', 'delete', 'patch'].includes(m.toLowerCase())

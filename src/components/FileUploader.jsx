@@ -1,42 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { Button, Card, CardContent, CardHeader, Typography, TextField, Alert, Box } from '@mui/material';
 import { Upload, FileJson, AlertCircle } from 'lucide-react';
-import yaml from 'js-yaml'; // Make sure to install js-yaml: npm install js-yaml
-
-// Helper function to resolve a $ref pointer in the spec
-const resolveRef = (root, ref) => {
-  if (typeof ref !== 'string' || !ref.startsWith('#/')) return null;
-  const parts = ref.substring(2).split('/');
-  let result = root;
-  for (let part of parts) {
-    if (result && Object.prototype.hasOwnProperty.call(result, part)) {
-      result = result[part];
-    } else {
-      return null;
-    }
-  }
-  return result;
-};
-
-// Recursively resolve all $ref in the object
-const resolveRefs = (obj, root) => {
-  if (Array.isArray(obj)) {
-    return obj.map(item => resolveRefs(item, root));
-  } else if (obj && typeof obj === 'object') {
-    if (obj.$ref) {
-      const resolved = resolveRef(root, obj.$ref);
-      return resolveRefs(resolved, root);
-    }
-    const result = {};
-    for (let key in obj) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        result[key] = resolveRefs(obj[key], root);
-      }
-    }
-    return result;
-  }
-  return obj;
-};
+import yaml from 'js-yaml';
 
 export default function FileUploader({ onSpecUpload }) {
   const [specContent, setSpecContent] = useState('');
@@ -54,60 +19,19 @@ export default function FileUploader({ onSpecUpload }) {
     }
   }, []);
 
-  // Manual parsing that supports Swagger 2.0.x and OpenAPI 3.0.x
-  const validateAndParseSpec = async (content) => {
-    setIsProcessing(true);
+  const validateAndParseSpec = (content) => {
+    let parsed;
     try {
-      let parsed;
+      parsed = JSON.parse(content);
+    } catch {
       try {
-        parsed = JSON.parse(content);
-      } catch (jsonErr) {
-        // If JSON parsing fails, try YAML parsing
-        try {
-          parsed = yaml.load(content);
-        } catch (yamlErr) {
-          throw new Error("Unable to parse API specification as JSON or YAML");
-        }
+        parsed = yaml.load(content);
+      } catch (err){
+        console.trace(err);
+        throw new Error("Unable to parse API specification as JSON or YAML");
       }
-
-      // Validate whether it's a Swagger 2.0.x or OpenAPI 3.0.x spec
-      let specType = null;
-      if (parsed.swagger && typeof parsed.swagger === 'string' && parsed.swagger.startsWith("2.")) {
-        specType = "swagger";
-      } else if (parsed.openapi && typeof parsed.openapi === 'string' && parsed.openapi.startsWith("3.")) {
-        specType = "openapi";
-      } else {
-        throw new Error("API specification is neither Swagger 2.0.x nor OpenAPI 3.0.x");
-      }
-
-      // Recursively resolve $ref pointers
-      const resolvedSpec = resolveRefs(parsed, parsed);
-
-      // Extract API info (from the 'info' object)
-      let title = "Untitled API";
-      let version = "";
-      let description = "";
-      if (resolvedSpec.info) {
-        title = resolvedSpec.info.title || title;
-        version = resolvedSpec.info.version || version;
-        description = resolvedSpec.info.description || description;
-      } else {
-        throw new Error("API specification missing 'info' object");
-      }
-
-      return {
-        title,
-        description,
-        version,
-        spec_type: specType,
-        spec_content: content,
-        parsedSpec: resolvedSpec, // Fully resolved spec for downstream usage
-      };
-    } catch (error) {
-      throw new Error(error.message || "Failed to parse API specification");
-    } finally {
-      setIsProcessing(false);
     }
+    return parsed;
   };
 
   const handleDrop = async (e) => {
@@ -122,7 +46,7 @@ export default function FileUploader({ onSpecUpload }) {
       reader.onload = async (e) => {
         try {
           const content = e.target.result;
-          const parsedSpec = await validateAndParseSpec(content);
+          const parsedSpec = validateAndParseSpec(content);
           onSpecUpload(parsedSpec);
         } catch (error) {
           setError(error.message);
@@ -139,7 +63,7 @@ export default function FileUploader({ onSpecUpload }) {
       reader.onload = async (e) => {
         try {
           const content = e.target.result;
-          const parsedSpec = await validateAndParseSpec(content);
+          const parsedSpec = validateAndParseSpec(content);
           onSpecUpload(parsedSpec);
         } catch (error) {
           setError(error.message);
@@ -151,7 +75,7 @@ export default function FileUploader({ onSpecUpload }) {
 
   const handlePaste = async () => {
     try {
-      const parsedSpec = await validateAndParseSpec(specContent);
+      const parsedSpec = validateAndParseSpec(specContent);
       onSpecUpload(parsedSpec);
     } catch (error) {
       setError(error.message);
